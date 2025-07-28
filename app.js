@@ -12,7 +12,6 @@ const MongoClient = new mongodb.MongoClient(process.env.MONGO, {
 
 let db, usersCollection;
 
-// ✅ Connect once on server start
 MongoClient.connect()
   .then((client) => {
     db = client.db("restaurant");
@@ -60,23 +59,23 @@ app.get("/api/users", async (req, res) => {
 app.post("/api/auth", async (req, res) => {
   const {email,password,username,new_user,google} = req.body;
   if (google){
-    const user = await users.findOne({ email });
+    const user = await usersCollection.findOne({ email });
     if (user) {
       return res.status(200).json({ message: "Login Done",name:username});
     }
-    await users.insertOne({ email, username });
+    await user.insertOne({ email, username });
     return res.status(201).json({ message: "Login Done",name:username});
   }
   if (new_user) {
-    const existingUser = await users.findOne
+    const existingUser = await usersCollection.findOne
 ({ email });
     if (existingUser) {
       return res.status(400).json({ error: "User already exists." });
     }
-      await users.insertOne({ email, password, username })
+      await usersCollection.insertOne({ email, password, username })
       return res.status(201).json({ message: "User created successfully!" , name: username });
   }
-  const user= await users.findOne({ email });
+  const user= await usersCollection.findOne({ email });
   if (user) {
     if (user.password === password) {
       res.status(200).json({ message: "Login successful!", name: user.username });
