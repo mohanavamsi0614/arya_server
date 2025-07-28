@@ -5,13 +5,28 @@ const dotenv= require("dotenv").config()
 const app = express();
 app.use(cors({origin:"*"}));
 app.use(express.json());
-const MongoClient =new  mongodb.MongoClient(process.env.MONGO);
-mongodb.MongoClient.connect = async function() {
-  return await MongoClient.connect(process.env.MONGO, { useNewUrlParser: true, useUnifiedTopology: true });
-};
-const db= MongoClient.db("restaurant");
-const users= db.collection("users");
+const MongoClient = new mongodb.MongoClient(process.env.MONGO, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+});
 
+let db, usersCollection;
+
+// ✅ Connect once on server start
+MongoClient.connect()
+  .then((client) => {
+    db = client.db("restaurant");
+    usersCollection = db.collection("users");
+
+    // ✅ Start the server only after DB connects
+    app.listen(5000, () => {
+      console.log("Server running on port 5000");
+    });
+  })
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+    process.exit(1); // Stop server if DB fails
+  });
 app.get("/", (req, res) => {
   res.send("Hello World!");
 });
