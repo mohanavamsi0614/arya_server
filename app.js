@@ -3,6 +3,7 @@ const mongodb = require("mongodb");
 const cors = require("cors");
 const dotenv= require("dotenv").config()
 const app = express();
+
 app.use(cors({origin:"*"}));
 app.use(express.json());
 const MongoClient = new mongodb.MongoClient(process.env.MONGO, {
@@ -63,7 +64,7 @@ app.post("/api/auth", async (req, res) => {
     if (user) {
       return res.status(200).json({ message: "Login Done",name:username});
     }
-    await user.insertOne({ email, username });
+    await usersCollection.insertOne({ email, username });
     return res.status(201).json({ message: "Login Done",name:username});
   }
   if (new_user) {
