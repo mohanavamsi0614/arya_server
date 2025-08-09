@@ -136,7 +136,7 @@ app.post("/api/auth", async (req, res) => {
       return res.status(400).json({ error: "User already exists." });
     }
       await usersCollection.insertOne({ email, password, username })
-      return res.status(201).json({ message: "User created successfully!" , name: username });
+      return res.status(201).json({ message: "User created successfully!" , name: username,email });
   }
   const user= await usersCollection.findOne({ email });
   if (user) {
