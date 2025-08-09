@@ -3,6 +3,7 @@ const mongodb = require("mongodb");
 const cors = require("cors");
 const dotenv= require("dotenv").config()
 const app = express();
+const stripe = require("stripe")(process.env.stripe);
 
 app.use(cors({origin:"*"}));
 app.use(express.json());
@@ -11,12 +12,13 @@ const MongoClient = new mongodb.MongoClient(process.env.MONGO, {
   useUnifiedTopology: true
 });
 
-let db, usersCollection;
-
+let db, usersCollection, orderCollection;
+const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
 MongoClient.connect()
   .then((client) => {
     db = client.db("restaurant");
     usersCollection = db.collection("users");
+    orderCollection = db.collection("orders");
 
     // ✅ Start the server only after DB connects
     app.listen(5000, () => {
@@ -53,6 +55,66 @@ app.get("/api/users", async (req, res) => {
     res.status(200).json(users);
   } catch (error) {
     console.error("Error fetching users:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+
+app.get("/api/orders", async (req, res) => {
+  try {
+    const orders = await orderCollection.find().toArray();
+    res.status(200).json(orders);
+  } catch (error) {
+    console.error("Error fetching orders:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+app.post("/api/order/:sessionId", async (req, res) => {
+  const { userId, items, type, additionalInfo , total} = req.body.data;
+  console.log("Creating order for session:", req.body);
+
+  if (!userId || !items || items.length === 0) {
+    return res.status(400).json({ error: "Invalid order data." });
+  }
+    const {sessionId} = req.params;
+  const check=await stripe.checkout.sessions.retrieve(sessionId)
+  console.log("Payment status:", check);
+  if (check.payment_status != "paid"){
+    res.json("payment not successful")
+    return
+  }
+  try {
+    const newOrder = {
+      userId,
+      items,
+      type,
+      status: "pending",
+      additionalInfo: additionalInfo,
+      createdAt:days[new Date().getDay()] + " "+ new Date().getDate()+"/"+(new Date().getMonth()+1)+"/"+new Date().getFullYear(),
+      time: new Date().getHours()+":"+new Date().getMinutes(),
+      table:additionalInfo.tableNumber || null,
+      total:total
+    };
+
+    await orderCollection.insertOne(newOrder);
+    res.status(201).json({ message: "Order created successfully!" });
+  } catch (error) {
+    console.error("Error creating order:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+app.post("/api/order-status", async (req, res) => {
+  const { orderId, status } = req.body;
+  console.log(orderId,status)
+  if (!orderId || !status) {
+    return res.status(400).json({ error: "Invalid order status data." });
+  }
+
+  try {
+    const orderIdObj = new mongodb.ObjectId(orderId);
+    await orderCollection.updateOne({ _id: orderIdObj }, { $set: { status } });
+    res.status(200).json({ message: "Order status updated successfully!" });
+  } catch (error) {
+    console.error("Error updating order status:", error);
     res.status(500).json({ error: "Internal server error." });
   }
 });
@@ -114,6 +176,37 @@ app.post("/api/reservation", async (req, res) => {
   } catch (error) {
     console.error("Error creating reservation:", error);
     res.status(500).json({ error: "Internal server error." });
+  }
+});
+
+app.post("/api/create-checkout-session", async (req, res) => {
+  const { products } = req.body;
+
+  const line_items = products.map((item) => ({
+    price_data: {
+      currency: "eur", // or "eur"
+      product_data: {
+        name: item.name,
+        // images: [item.image],
+        description: item.description || "No description",
+      },
+      unit_amount: Math.round(item.price * 100),
+    },
+    quantity: item.quantity,
+  }));
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: line_items,
+      mode: "payment",
+      success_url: "http://localhost:5173/success/{CHECKOUT_SESSION_ID}",
+      cancel_url: "http://localhost:5173/cancel",
+    });
+    res.json({ sessionId: session.id });
+  } catch (error) {
+    console.error("Stripe Checkout Error:", error);
+    res.status(500).json({ error: "Failed to create checkout session" });
   }
 });
 
