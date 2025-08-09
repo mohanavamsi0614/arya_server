@@ -200,8 +200,8 @@ app.post("/api/create-checkout-session", async (req, res) => {
       payment_method_types: ["card"],
       line_items: line_items,
       mode: "payment",
-      success_url: "http://localhost:5173/success/{CHECKOUT_SESSION_ID}",
-      cancel_url: "http://localhost:5173/cancel",
+      success_url: "https://arya-pink-nine.vercel.app/success/{CHECKOUT_SESSION_ID}",
+      cancel_url: "https://arya-pink-nine.vercel.app/cancel",
     });
     res.json({ sessionId: session.id });
   } catch (error) {
