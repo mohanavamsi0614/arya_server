@@ -171,10 +171,10 @@ app.post("/api/auth", async (req, res) => {
   if (google){
     const user = await usersCollection.findOne({ email });
     if (user) {
-      return res.status(200).json({ message: "Login Done",name:username});
+      return res.status(200).json({ message: "Login Done",name:username,email});
     }
     await usersCollection.insertOne({ email, username });
-    return res.status(201).json({ message: "Login Done",name:username});
+    return res.status(201).json({ message: "Login Done",name:username,email});
   }
   if (new_user) {
     const existingUser = await usersCollection.findOne
@@ -188,7 +188,7 @@ app.post("/api/auth", async (req, res) => {
   const user= await usersCollection.findOne({ email });
   if (user) {
     if (user.password === password) {
-      res.status(200).json({ message: "Login successful!", name: user.username });
+      res.status(200).json({ message: "Login successful!", name: user.username,email });
     } else {
       res.status(401).json({ error: "Invalid password." });
     }
