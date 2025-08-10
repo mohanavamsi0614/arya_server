@@ -5,6 +5,7 @@ const dotenv= require("dotenv").config()
 const app = express();
 const stripe = require("stripe")(process.env.stripe);
 
+
 app.use(cors({origin:"*"}));
 app.use(express.json());
 const MongoClient = new mongodb.MongoClient(process.env.MONGO, {
@@ -12,13 +13,14 @@ const MongoClient = new mongodb.MongoClient(process.env.MONGO, {
   useUnifiedTopology: true
 });
 
-let db, usersCollection, orderCollection;
+let db, usersCollection, orderCollection,menuCollection;
 const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
 MongoClient.connect()
   .then((client) => {
     db = client.db("restaurant");
     usersCollection = db.collection("users");
     orderCollection = db.collection("orders");
+    menuCollection = db.collection("menu");
 
     // ✅ Start the server only after DB connects
     app.listen(5000, () => {
@@ -31,6 +33,51 @@ MongoClient.connect()
   });
 app.get("/", (req, res) => {
   res.send("Hello World!");
+});
+
+app.get("/api/menu", async (req, res) => {
+  try {
+    const menuItems = await menuCollection.find().toArray();
+    res.status(200).json(menuItems);
+  } catch (error) {
+    console.error("Error fetching menu:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+
+app.post("/api/menu", async (req, res) => {
+  const {item}=req.body;
+  console.log(item)
+  try {
+    await menuCollection.insertOne(item);
+    res.status(201).json({ message: "Menu item added successfully!" });
+  } catch (error) {
+    console.error("Error adding menu item:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+
+app.post("/api/menu/:id", async (req, res) => {
+  const {id}=req.params;
+  const {item}=req.body;
+  try {
+    await menuCollection.updateOne({ _id: new mongodb.ObjectId(id) }, { $set: item });
+    res.status(200).json({ message: "Menu item updated successfully!" });
+  } catch (error) {
+    console.error("Error updating menu item:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+
+app.delete("/api/menu/:id", async (req, res) => {
+  const {id}=req.params;
+  try {
+    await menuCollection.deleteOne({ _id: new mongodb.ObjectId(id) });
+    res.status(200).json({ message: "Menu item deleted successfully!" });
+  } catch (error) {
+    console.error("Error deleting menu item:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
 });
 
 app.get("/api/reservations", async (req, res) => {
