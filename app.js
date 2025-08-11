@@ -117,6 +117,7 @@ app.get("/api/orders", async (req, res) => {
 });
 app.post("/api/order/:sessionId", async (req, res) => {
   const { userId, items, type, additionalInfo , total} = req.body.data;
+  const {sessionId} = req.params;
   const checkse=await orderCollection.findOne({ sessionId });
   if (checkse) {
     res.json("Order already exists");
@@ -127,7 +128,6 @@ app.post("/api/order/:sessionId", async (req, res) => {
   if (!userId || !items || items.length === 0) {
     return res.status(400).json({ error: "Invalid order data." });
   }
-    const {sessionId} = req.params;
   const check=await stripe.checkout.sessions.retrieve(sessionId)
   console.log("Payment status:", check);
   if (check.payment_status != "paid"){
