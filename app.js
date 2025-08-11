@@ -117,6 +117,11 @@ app.get("/api/orders", async (req, res) => {
 });
 app.post("/api/order/:sessionId", async (req, res) => {
   const { userId, items, type, additionalInfo , total} = req.body.data;
+  const checkse=await orderCollection.findOne({ sessionId });
+  if (checkse) {
+    res.json("Order already exists");
+    return
+  }
   console.log("Creating order for session:", req.body);
 
   if (!userId || !items || items.length === 0) {
@@ -134,12 +139,13 @@ app.post("/api/order/:sessionId", async (req, res) => {
       userId,
       items,
       type,
+      sessionId,
       status: "pending",
       additionalInfo: additionalInfo,
       createdAt:days[new Date().getDay()] + " "+ new Date().getDate()+"/"+(new Date().getMonth()+1)+"/"+new Date().getFullYear(),
       time: new Date().getHours()+":"+new Date().getMinutes(),
       table:additionalInfo.tableNumber || null,
-      total:total
+      total:total,
     };
 
     await orderCollection.insertOne(newOrder);
@@ -247,7 +253,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
       payment_method_types: ["card"],
       line_items: line_items,
       mode: "payment",
-      success_url: "https://arya-pink-nine.vercel.app/success/{CHECKOUT_SESSION_ID}",
+      success_url: "http://localhost:5173/success/{CHECKOUT_SESSION_ID}",
       cancel_url: "https://arya-pink-nine.vercel.app/cancel",
     });
     res.json({ sessionId: session.id });
