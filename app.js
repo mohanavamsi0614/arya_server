@@ -1,8 +1,12 @@
 const express = require("express");
 const mongodb = require("mongodb");
 const cors = require("cors");
+const { Socket } = require("socket.io");
 const dotenv= require("dotenv").config()
 const app = express();
+const socketio = require("socket.io");
+const server=require("http").createServer(app);
+const io =socketio(server, {cors:{origin:"*"}})
 const stripe = require("stripe")(process.env.stripe);
 
 
@@ -12,6 +16,7 @@ const MongoClient = new mongodb.MongoClient(process.env.MONGO, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 });
+
 
 let db, usersCollection, orderCollection,menuCollection;
 const days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
@@ -109,38 +114,56 @@ app.get("/api/users", async (req, res) => {
 app.get("/api/orders", async (req, res) => {
   try {
     const orders = await orderCollection.find().toArray();
+    console.log(orders)
     res.status(200).json(orders);
   } catch (error) {
     console.error("Error fetching orders:", error);
     res.status(500).json({ error: "Internal server error." });
   }
 });
-app.post("/api/order/:sessionId", async (req, res) => {
-  const { userId, items, type, additionalInfo , total} = req.body.data;
-  const {sessionId} = req.params;
-  const checkse=await orderCollection.findOne({ sessionId });
-  if (checkse) {
-    res.json("Order already exists");
-    return
-  }
-  console.log("Creating order for session:", req.body);
 
-  if (!userId || !items || items.length === 0) {
-    return res.status(400).json({ error: "Invalid order data." });
-  }
-  const check=await stripe.checkout.sessions.retrieve(sessionId)
-  console.log("Payment status:", check);
-  if (check.payment_status != "paid"){
-    res.json("payment not successful")
-    return
-  }
+app.get("/api/orders/:id", async (req, res) => {
+  const {id} = req.params
+  console.log(id)
+  const orders=await orderCollection.find({userId:id}).toArray();
+  console.log(orders)
+  res.status(200).json(orders);
+})
+
+app.post("/api/create-checkout-session", async (req, res) => {
+  const { products,data } = req.body;
+  console.log(data)
+  const { userId, additionalInfo, items,type,total } = data;
+
+  const line_items = products.map((item) => ({
+    price_data: {
+      currency: "eur",
+      product_data: {
+        name: item.name,
+        images: [item.image],
+        description: item.description || "No description",
+      },
+      unit_amount: Math.round(item.price * 100),
+    },
+    quantity: item.quantity,
+  }));
+
   try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: line_items,
+      mode: "payment",
+      success_url: "http://localhost:5173/success/{CHECKOUT_SESSION_ID}",
+      cancel_url: "https://arya-pink-nine.vercel.app/cancel",
+    });
+      try {
     const newOrder = {
       userId,
       items,
       type,
-      sessionId,
+      sessionId:session.id,
       status: "pending",
+      payment:"pending",
       additionalInfo: additionalInfo,
       createdAt:days[new Date().getDay()] + " "+ new Date().getDate()+"/"+(new Date().getMonth()+1)+"/"+new Date().getFullYear(),
       time: new Date().getHours()+":"+new Date().getMinutes(),
@@ -149,11 +172,31 @@ app.post("/api/order/:sessionId", async (req, res) => {
     };
 
     await orderCollection.insertOne(newOrder);
-    res.status(201).json({ message: "Order created successfully!" });
   } catch (error) {
     console.error("Error creating order:", error);
     res.status(500).json({ error: "Internal server error." });
   }
+
+    res.json({ sessionId: session.id });
+  } catch (error) {
+    console.error("Stripe Checkout Error:", error);
+    res.status(500).json({ error: "Failed to create checkout session" });
+  }
+});
+
+app.post("/api/order/:sessionId", async (req, res) => {
+  const { sessionId } = req.params;
+  console.log("Creating order for session:", req.body);
+
+  
+  const check=await stripe.checkout.sessions.retrieve(sessionId)
+  console.log("Payment status:", check);
+  if (check.payment_status != "paid"){
+    res.json("payment not successful")
+    return
+  }
+  await orderCollection.updateOne({ sessionId }, { $set: { payment: "paid", orderId: "Arya" + new Date().getHours()+ new Date().getMinutes()+ new Date().getSeconds() } });
+  res.json("Payment successful");
 });
 app.post("/api/order-status", async (req, res) => {
   const { orderId, status } = req.body;
@@ -177,10 +220,10 @@ app.post("/api/auth", async (req, res) => {
   if (google){
     const user = await usersCollection.findOne({ email });
     if (user) {
-      return res.status(200).json({ message: "Login Done",name:username,email});
+      return res.status(200).json({ message: "Login Done", userId: user._id ,email});
     }
     await usersCollection.insertOne({ email, username });
-    return res.status(201).json({ message: "Login Done",name:username,email});
+    return res.status(201).json({ message: "Login Done", userId: user._id ,email});
   }
   if (new_user) {
     const existingUser = await usersCollection.findOne
@@ -189,12 +232,12 @@ app.post("/api/auth", async (req, res) => {
       return res.status(400).json({ error: "User already exists." });
     }
       await usersCollection.insertOne({ email, password, username })
-      return res.status(201).json({ message: "User created successfully!" , name: username,email });
+      return res.status(201).json({ message: "User created successfully!" , userId: user._id ,email});
   }
   const user= await usersCollection.findOne({ email });
   if (user) {
     if (user.password === password) {
-      res.status(200).json({ message: "Login successful!", name: user.username,email });
+      res.status(200).json({ message: "Login successful!", userId: user._id ,email});
     } else {
       res.status(401).json({ error: "Invalid password." });
     }
@@ -232,37 +275,17 @@ app.post("/api/reservation", async (req, res) => {
   }
 });
 
-app.post("/api/create-checkout-session", async (req, res) => {
-  const { products } = req.body;
-
-  const line_items = products.map((item) => ({
-    price_data: {
-      currency: "eur", // or "eur"
-      product_data: {
-        name: item.name,
-        // images: [item.image],
-        description: item.description || "No description",
-      },
-      unit_amount: Math.round(item.price * 100),
-    },
-    quantity: item.quantity,
-  }));
-
-  try {
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      line_items: line_items,
-      mode: "payment",
-      success_url: "http://localhost:5173/success/{CHECKOUT_SESSION_ID}",
-      cancel_url: "https://arya-pink-nine.vercel.app/cancel",
-    });
-    res.json({ sessionId: session.id });
-  } catch (error) {
-    console.error("Stripe Checkout Error:", error);
-    res.status(500).json({ error: "Failed to create checkout session" });
-  }
+io.on("connection", (socket) => {
+  console.log("New client connected:", socket.id);
+  socket.on("order",async ()=>{
+    const orders = await orderCollection.find({}).toArray();
+    console.log("Current orders:", orders);
+    io.emit("new-order", orders);
+  })
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
+  });
 });
-
-app.listen(5000, () => {
+server.listen(5000, () => {
   console.log("Server is running on port 5000");
 });
