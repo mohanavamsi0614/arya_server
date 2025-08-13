@@ -310,8 +310,8 @@ app.post("/api/auth", async (req, res) => {
     if (existingUser) {
       return res.status(400).json({ error: "User already exists." });
     }
-      await usersCollection.insertOne({ email, password, username })
-      return res.status(201).json({ message: "Login successful!" , userId: user._id ,email,username :user.username });
+    const user = await usersCollection.insertOne({ email, password, username });
+    return res.status(201).json({ message: "Login successful!" , userId: user._id ,email,username :user.username });
   }
   if (google){
     if (user) {
