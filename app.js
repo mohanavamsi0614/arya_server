@@ -279,8 +279,8 @@ app.post("/api/order-status", async (req, res) => {
 
 app.post("/api/auth", async (req, res) => {
   const {email,password,username,new_user,google} = req.body;
+  const user = await usersCollection.findOne({ email });
   if (google){
-    const user = await usersCollection.findOne({ email });
     if (user) {
       return res.status(200).json({ message: "Login Done", userId: user._id ,email,username: user.username });
     }
