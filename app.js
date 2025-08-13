@@ -296,7 +296,6 @@ app.post("/api/auth", async (req, res) => {
       await usersCollection.insertOne({ email, password, username })
       return res.status(201).json({ message: "User created successfully!" , userId: user._id ,email,username :user.username });
   }
-  const user= await usersCollection.findOne({ email });
   if (user) {
     if (user.password === password) {
       res.status(200).json({ message: "Login successful!", userId: user._id ,email,username: user.username });
@@ -336,53 +335,69 @@ app.post("/api/reservation", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-app.get('/check' ,async (req , res)=>{
+app.get('/api/check' ,async (req , res)=>{
   const orders=await orderCollection.find({status:"pending"}).toArray();
   if(orders){
+    console.log("Pending orders found:", orders);
     orders.forEach(async (element)=>{
-      await transporter.sendMail({to:"mohanavamsi4@gmail.com",from:process.env.MAIL,subject:"Pending Orders",html:
+      await transporter.sendMail({to:"mohanavamsi14@gmail.com",from:process.env.MAIL,subject:"Pending Orders",html:
       `
-      <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>Pending Order Reminder</title>
-  <style>
-    body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; }
-    .container { max-width: 600px; margin: auto; padding: 20px; background-color: #fff; }
-    h2 { color: #c0392b; }
-    p { font-size: 16px; line-height: 1.5; }
-    ul { padding-left: 20px; }
-    li { margin-bottom: 8px; }
-    .footer { margin-top: 20px; font-size: 14px; color: #777; }
-  </style>
 </head>
-<body>
-  <div class="container">
-    <h2>Action Needed – Order #${element.orderId} Pending</h2>
-    <p>Hello <strong>Staff</strong>,</p>
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f6f6f6; color: #333;">
+  <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #eee;">
+    
+    <div style="background-color: #c0392b; color: #fff; padding: 20px; text-align: center;">
+      <h2 style="margin: 0; font-size: 22px;">⚠ Action Required – Order #${element.orderId} Pending</h2>
+    </div>
 
-    <p>An order has been waiting for acceptance for over <strong>5 minutes</strong> on the Arya Asian dashboard.</p>
+    <div style="padding: 20px;">
+      <p style="font-size: 15px; margin-bottom: 12px;">Hello <strong>Staff</strong>,</p>
 
-    <h3>Order Details:</h3>
-    <ul>
-      <li><strong>Customer:</strong> ${element.additionalInfo.fullName}</li>
-      <li><strong>Items:</strong> ${element.map((i)=>{
-        return `<li>${i.name} - ${i.quantity}</li>`;
-      })}</li>
-      <li><strong>Order Time:</strong> ${element.time}</li>
-    </ul>
+      <p style="font-size: 15px; line-height: 1.6; margin-bottom: 12px;">
+        An order has been awaiting acceptance for over <strong>5 minutes</strong> on the Arya Asian staff dashboard.
+        Please review and accept it immediately to avoid delays in service.
+      </p>
 
-    <p>Please log into your <strong>staff dashboard</strong> now and accept the order to avoid delays.<br>
-    Dashboard Link: <a href="">Open Dashboard</a></p>
+      <h3 style="margin: 15px 0 8px;">Order Details</h3>
+      <ul style="padding-left: 18px; margin: 0 0 12px;">
+        <li><strong>Customer:</strong> ${element.additionalInfo.fullName}</li>
+        <li><strong>Order Time:</strong> ${element.time}</li>
+      </ul>
 
-    <p class="footer">— Arya Asian Management Team</p>
+      <h4 style="margin: 15px 0 8px;">Items:</h4>
+      <ul style="padding-left: 18px; margin: 0;">
+        ${element.items.map(i => `
+          <li style="margin-bottom: 8px; font-size: 15px;">
+            <img src="${i.image}" alt="${i.name}" style="width:50px; height:50px; object-fit:cover; vertical-align: middle; border-radius: 4px; margin-right: 8px;">
+            ${i.name} – ${i.quantity}
+          </li>
+        `).join('')}
+      </ul>
+
+      <p style="margin-top: 15px;">
+        <a href="" style="display: inline-block; padding: 10px 16px; background-color: #c0392b; color: #fff; text-decoration: none; border-radius: 4px;">Open Dashboard</a>
+      </p>
+    </div>
+
+    <div style="font-size: 13px; color: #777; text-align: center; padding: 15px; border-top: 1px solid #eee;">
+      — Arya Asian Management Team
+    </div>
+
   </div>
 </body>
 </html>
       `})
     })
     
+    return res.json("Check completed");
+  }
+  else{
+    return res.status(404).json({ error: "No pending orders found." });
   }
 })  
 io.on("connection", (socket) => {
