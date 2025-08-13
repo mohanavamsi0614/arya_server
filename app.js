@@ -5,6 +5,7 @@ const { Socket } = require("socket.io");
 const dotenv= require("dotenv").config()
 const app = express();
 const socketio = require("socket.io");
+const { use } = require("react");
 const server=require("http").createServer(app);
 const io =socketio(server, {cors:{origin:"*"}})
 const stripe = require("stripe")(process.env.stripe);
@@ -220,10 +221,10 @@ app.post("/api/auth", async (req, res) => {
   if (google){
     const user = await usersCollection.findOne({ email });
     if (user) {
-      return res.status(200).json({ message: "Login Done", userId: user._id ,email});
+      return res.status(200).json({ message: "Login Done", userId: user._id ,email,username: user.username });
     }
     await usersCollection.insertOne({ email, username });
-    return res.status(201).json({ message: "Login Done", userId: user._id ,email});
+    return res.status(201).json({ message: "Login Done", userId: user._id ,email,username: user.username });
   }
   if (new_user) {
     const existingUser = await usersCollection.findOne
@@ -232,12 +233,12 @@ app.post("/api/auth", async (req, res) => {
       return res.status(400).json({ error: "User already exists." });
     }
       await usersCollection.insertOne({ email, password, username })
-      return res.status(201).json({ message: "User created successfully!" , userId: user._id ,email});
+      return res.status(201).json({ message: "User created successfully!" , userId: user._id ,email,username :user.username });
   }
   const user= await usersCollection.findOne({ email });
   if (user) {
     if (user.password === password) {
-      res.status(200).json({ message: "Login successful!", userId: user._id ,email});
+      res.status(200).json({ message: "Login successful!", userId: user._id ,email,username: user.username });
     } else {
       res.status(401).json({ error: "Invalid password." });
     }
