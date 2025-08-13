@@ -5,9 +5,16 @@ const { Socket } = require("socket.io");
 const dotenv= require("dotenv").config()
 const app = express();
 const socketio = require("socket.io");
-const { use } = require("react");
 const server=require("http").createServer(app);
 const io =socketio(server, {cors:{origin:"*"}})
+const nodemailer = require("nodemailer");
+const transpoter= nodemailer.createTransport({
+  service:"gmail",
+  auth:{
+    user: process.env.MAIL,
+    pass: process.env.PASS
+  }
+})
 const stripe = require("stripe")(process.env.stripe);
 
 
@@ -188,7 +195,10 @@ app.post("/api/create-checkout-session", async (req, res) => {
 app.post("/api/order/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
   console.log("Creating order for session:", req.body);
-
+  const order=await orderCollection.findOne({ sessionId })
+  if(order.payment === "paid"){
+    res.json("Order already paid");
+    }
   
   const check=await stripe.checkout.sessions.retrieve(sessionId)
   console.log("Payment status:", check);
@@ -196,7 +206,57 @@ app.post("/api/order/:sessionId", async (req, res) => {
     res.json("payment not successful")
     return
   }
+  console.log("User ID from order:", order.userId);
+  const user = await usersCollection.findOne({ _id: new mongodb.ObjectId(order.userId) });
+console.log(user)
   await orderCollection.updateOne({ sessionId }, { $set: { payment: "paid", orderId: "Arya" + new Date().getHours()+ new Date().getMinutes()+ new Date().getSeconds() } });
+  await transpoter.sendMail({to:user.email,from:process.env.MAIL,subject:"Order Confirmation",html:`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Order Confirmation</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: auto; padding: 20px; background-color: #fff; }
+    h2 { color: #d35400; }
+    p { font-size: 16px; line-height: 1.5; }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 8px; }
+    .footer { margin-top: 20px; font-size: 14px; color: #777; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Your Arya Asian Order is Confirmed!</h2>
+    <p>Hi <strong>${user.username}</strong>,</p>
+
+    <p>Thank you for ordering from <strong>Arya Asian Restaurant</strong>!  
+    Your order <strong>#${order.orderId}</strong> has been successfully placed and paid.</p>
+
+    <h3>Order Details:</h3>
+    <ul>
+      <li><strong>Items:</strong>
+        <ul>
+          ${order.items.map(item => `<li>
+          <img src="${item.image}" alt="${item.name}" style="width: 100px; height: auto;">
+          ${item.name} - £${item.price}</li>`).join("")}
+        </ul>
+      </li>
+      <li><strong>Total Amount:</strong> £${order.total}</li>
+      <li><strong>Order Time:</strong> ${order.createdAt} ${order.time}</li>
+      <li><strong>Delivery/Pickup:</strong> ${order.deliveryMode}</li>
+    </ul>
+
+    <p>We’ll start preparing your food right away so it reaches you fresh and delicious.<br>
+    You can track your order status anytime here: <a href="[Order Tracking Link]">Track Order</a></p>
+
+    <p>If you have any questions, feel free to call us at <strong>[Phone Number]</strong>.</p>
+
+    <p class="footer"><strong>Arya Asian Restaurant</strong> – Bringing authentic Asian flavors to your table.</p>
+  </div>
+</body>
+</html>`})
+  
   res.json("Payment successful");
 });
 app.post("/api/order-status", async (req, res) => {
