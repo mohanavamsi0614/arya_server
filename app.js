@@ -318,7 +318,7 @@ app.post("/api/auth", async (req, res) => {
       return res.status(400).json({ error: "User already exists." });
     }
       await usersCollection.insertOne({ email, password, username })
-      return res.status(201).json({ message: "User created successfully!" , userId: user._id ,email,username :user.username });
+      return res.status(201).json({ message: "Login successful!" , userId: user._id ,email,username :user.username });
   }
   if (user) {
     if (user.password === password) {
