@@ -166,25 +166,37 @@ app.post("/api/create-checkout-session", async (req, res) => {
       cancel_url: "https://arya-pink-nine.vercel.app/cancel",
     });
       try {
-    const newOrder = {
-      userId,
-      items,
-      type,
-      sessionId:session.id,
-      status: "pending",
-      payment:"pending",
-      additionalInfo: additionalInfo,
-      createdAt:days[new Date().getDay()] + " "+ new Date().getDate()+"/"+(new Date().getMonth()+1)+"/"+new Date().getFullYear(),
-      time: new Date().getHours()+":"+new Date().getMinutes(),
-      table:additionalInfo.tableNumber || null,
-      total:total,
-    };
+        // Get UK time
+        const ukDate = new Date().toLocaleString("en-GB", { timeZone: "Europe/London" });
+        const ukTime = new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/London", hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        // Generate unique, meaningful orderId
+        const now = new Date();
+        const pad = n => n.toString().padStart(2, '0');
+        const dateStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
+        const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+        const randStr = Math.floor(1000 + Math.random() * 9000);
+        const orderId = `ARYA-${dateStr}-${timeStr}-${randStr}`;
 
-    await orderCollection.insertOne(newOrder);
-  } catch (error) {
-    console.error("Error creating order:", error);
-    res.status(500).json({ error: "Internal server error." });
-  }
+        const newOrder = {
+          userId,
+          items,
+          type,
+          sessionId: session.id,
+          status: "pending",
+          payment: "pending",
+          additionalInfo: additionalInfo,
+          createdAt: ukDate,
+          time: ukTime,
+          table: additionalInfo.tableNumber || null,
+          total: total,
+          orderId: orderId,
+        };
+
+        await orderCollection.insertOne(newOrder);
+      } catch (error) {
+        console.error("Error creating order:", error);
+        res.status(500).json({ error: "Internal server error." });
+      }
 
     res.json({ sessionId: session.id });
   } catch (error) {
@@ -210,7 +222,19 @@ app.post("/api/order/:sessionId", async (req, res) => {
   console.log("User ID from order:", order.userId);
   const user = await usersCollection.findOne({ _id: new mongodb.ObjectId(order.userId) });
 console.log(user)
-  await orderCollection.updateOne({ sessionId }, { $set: { payment: "paid", orderId: "Arya" + new Date().getHours()+ new Date().getMinutes()+ new Date().getSeconds() } });
+  // Generate new UK time and unique orderId for payment confirmation
+  const now = new Date();
+  const pad = n => n.toString().padStart(2, '0');
+  const dateStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
+  const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const randStr = Math.floor(1000 + Math.random() * 9000);
+  const orderId = `ARYA-${dateStr}-${timeStr}-${randStr}`;
+  const ukDate = now.toLocaleString("en-GB", { timeZone: "Europe/London" });
+  const ukTime = now.toLocaleTimeString("en-GB", { timeZone: "Europe/London", hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  await orderCollection.updateOne(
+    { sessionId },
+    { $set: { payment: "paid", orderId: orderId, createdAt: ukDate, time: ukTime } }
+  );
   await transporter.sendMail({to:user.email,from:process.env.MAIL,subject:"Order Confirmation",html:`<!DOCTYPE html>
 <html>
 <head>
