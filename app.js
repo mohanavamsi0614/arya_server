@@ -8,9 +8,10 @@ const socketio = require("socket.io");
 const server=require("http").createServer(app);
 const io =socketio(server, {cors:{origin:"*"}})
 const nodemailer = require("nodemailer");
-const transpoter= nodemailer.createTransport({
-  service:"gmail",
-  auth:{
+const { asyncWrapProviders } = require("async_hooks");
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
     user: process.env.MAIL,
     pass: process.env.PASS
   }
@@ -210,7 +211,7 @@ app.post("/api/order/:sessionId", async (req, res) => {
   const user = await usersCollection.findOne({ _id: new mongodb.ObjectId(order.userId) });
 console.log(user)
   await orderCollection.updateOne({ sessionId }, { $set: { payment: "paid", orderId: "Arya" + new Date().getHours()+ new Date().getMinutes()+ new Date().getSeconds() } });
-  await transpoter.sendMail({to:user.email,from:process.env.MAIL,subject:"Order Confirmation",html:`<!DOCTYPE html>
+  await transporter.sendMail({to:user.email,from:process.env.MAIL,subject:"Order Confirmation",html:`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -335,7 +336,55 @@ app.post("/api/reservation", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
+app.get('/check' ,async (req , res)=>{
+  const orders=await orderCollection.find({status:"pending"}).toArray();
+  if(orders){
+    orders.forEach(async (element)=>{
+      await transporter.sendMail({to:"mohanavamsi4@gmail.com",from:process.env.MAIL,subject:"Pending Orders",html:
+      `
+      <!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Pending Order Reminder</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: auto; padding: 20px; background-color: #fff; }
+    h2 { color: #c0392b; }
+    p { font-size: 16px; line-height: 1.5; }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 8px; }
+    .footer { margin-top: 20px; font-size: 14px; color: #777; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Action Needed – Order #${element.orderId} Pending</h2>
+    <p>Hello <strong>Staff</strong>,</p>
 
+    <p>An order has been waiting for acceptance for over <strong>5 minutes</strong> on the Arya Asian dashboard.</p>
+
+    <h3>Order Details:</h3>
+    <ul>
+      <li><strong>Customer:</strong> ${element.additionalInfo.fullName}</li>
+      <li><strong>Items:</strong> ${element.map((i)=>{
+        return `<li>${i.name} - ${i.quantity}</li>`;
+      })}</li>
+      <li><strong>Order Time:</strong> ${element.time}</li>
+    </ul>
+
+    <p>Please log into your <strong>staff dashboard</strong> now and accept the order to avoid delays.<br>
+    Dashboard Link: <a href="">Open Dashboard</a></p>
+
+    <p class="footer">— Arya Asian Management Team</p>
+  </div>
+</body>
+</html>
+      `})
+    })
+    
+  }
+})  
 io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
   socket.on("order",async ()=>{
