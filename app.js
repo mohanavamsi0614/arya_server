@@ -304,13 +304,6 @@ app.post("/api/order-status", async (req, res) => {
 app.post("/api/auth", async (req, res) => {
   const {email,password,username,new_user,google} = req.body;
   const user = await usersCollection.findOne({ email });
-  if (google){
-    if (user) {
-      return res.status(200).json({ message: "Login Done", userId: user._id ,email,username: user.username });
-    }
-    await usersCollection.insertOne({ email, username });
-    return res.status(201).json({ message: "Login Done", userId: user._id ,email,username: user.username });
-  }
   if (new_user) {
     const existingUser = await usersCollection.findOne
 ({ email });
@@ -319,6 +312,13 @@ app.post("/api/auth", async (req, res) => {
     }
       await usersCollection.insertOne({ email, password, username })
       return res.status(201).json({ message: "Login successful!" , userId: user._id ,email,username :user.username });
+  }
+  if (google){
+    if (user) {
+      return res.status(200).json({ message: "Login Done", userId: user._id ,email,username: user.username });
+    }
+    await usersCollection.insertOne({ email, username });
+    return res.status(201).json({ message: "Login Done", userId: user._id ,email,username: user.username });
   }
   if (user) {
     if (user.password === password) {
