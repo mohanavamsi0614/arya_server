@@ -309,6 +309,7 @@ app.post("/api/order-status", async (req, res) => {
 
 app.post("/api/auth", async (req, res) => {
   const {email,password,username,new_user,google} = req.body;
+  console.log(req.body)
   const user = await usersCollection.findOne({ email });
   if (new_user) {
     const existingUser = await usersCollection.findOne({ email });
@@ -316,7 +317,8 @@ app.post("/api/auth", async (req, res) => {
       return res.status(400).json({ error: "User already exists." });
     }
     const user = await usersCollection.insertOne({ email, password, username, cartItems: [] });
-    return res.status(201).json({ message: "Login successful!" , userId: user._id ,email,username :user.username,cartItems: user.cartItems ? user.cartItems : [] });
+    console.log("New user created:", user);
+    return res.status(201).json({ message: "Login Done!" , userId: user.insertedId ,email,username,cartItems:[] });
   }
   if (google){
     if (user) {
@@ -336,7 +338,7 @@ app.post("/api/auth", async (req, res) => {
 app.post("/api/cart",async(req,res)=>{
   const { userId, items } = req.body;
   console.log(items)
-  if (!userId || !items || items.length === 0) {
+  if (!userId) {
     return res.status(400).json({ error: "Invalid cart data." });
   }
 
