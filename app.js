@@ -222,7 +222,7 @@ app.post("/api/order/:sessionId", async (req, res) => {
   console.log("User ID from order:", order.userId);
   const user = await usersCollection.findOne({ _id: new mongodb.ObjectId(order.userId) });
 console.log(user)
-  // Generate new UK time and unique orderId for payment confirmation
+
   const now = new Date();
   const pad = n => n.toString().padStart(2, '0');
   const dateStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
@@ -281,8 +281,14 @@ console.log(user)
   </div>
 </body>
 </html>`})
-  
-  res.json("Payment successful");
+
+user.cartItems = [];
+await usersCollection.updateOne(
+  { _id: user._id },
+  { $set: { cartItems: [] } }
+);
+
+res.json("Payment successful");
 });
 app.post("/api/order-status", async (req, res) => {
   const { orderId, status } = req.body;
@@ -305,30 +311,44 @@ app.post("/api/auth", async (req, res) => {
   const {email,password,username,new_user,google} = req.body;
   const user = await usersCollection.findOne({ email });
   if (new_user) {
-    const existingUser = await usersCollection.findOne
-({ email });
+    const existingUser = await usersCollection.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ error: "User already exists." });
     }
-    const user = await usersCollection.insertOne({ email, password, username });
-    return res.status(201).json({ message: "Login successful!" , userId: user._id ,email,username :user.username });
+    const user = await usersCollection.insertOne({ email, password, username, cartItems: [] });
+    return res.status(201).json({ message: "Login successful!" , userId: user._id ,email,username :user.username,cartItems: user.cartItems ? user.cartItems : [] });
   }
   if (google){
     if (user) {
-      return res.status(200).json({ message: "Login Done", userId: user._id ,email,username: user.username });
+      return res.status(200).json({ message: "Login Done", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [] });
     }
-    await usersCollection.insertOne({ email, username });
-    return res.status(201).json({ message: "Login Done", userId: user._id ,email,username: user.username });
+    await usersCollection.insertOne({ email, username, cartItems: [] });
+    return res.status(201).json({ message: "Login Done", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [] });
   }
   if (user) {
     if (user.password === password) {
-      res.status(200).json({ message: "Login successful!", userId: user._id ,email,username: user.username });
+      res.status(200).json({ message: "Login successful!", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [] });
     } else {
       res.status(401).json({ error: "Invalid password." });
     }
   }
 })
+app.post("/api/cart",async(req,res)=>{
+  const { userId, items } = req.body;
+  console.log(items)
+  if (!userId || !items || items.length === 0) {
+    return res.status(400).json({ error: "Invalid cart data." });
+  }
 
+  try {
+    const userIdObj = new mongodb.ObjectId(userId);
+    await usersCollection.updateOne({ _id: userIdObj }, { $set: { cartItems: items } });
+    res.status(200).json({ message: "Cart updated successfully!" });
+  } catch (error) {
+    console.error("Error updating cart:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+})
 app.post("/api/reservation", async (req, res) => {
   const { name, phone, email, guests, date, time } = req.body;
   if (!name || !phone || !email || !guests || !date || !time) {
