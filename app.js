@@ -1,14 +1,12 @@
 const express = require("express");
 const mongodb = require("mongodb");
 const cors = require("cors");
-const { Socket } = require("socket.io");
 const dotenv= require("dotenv").config()
 const app = express();
 const socketio = require("socket.io");
 const server=require("http").createServer(app);
 const io =socketio(server, {cors:{origin:"*"}})
 const nodemailer = require("nodemailer");
-const { asyncWrapProviders } = require("async_hooks");
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -35,9 +33,9 @@ MongoClient.connect()
     usersCollection = db.collection("users");
     orderCollection = db.collection("orders");
     menuCollection = db.collection("menu");
+    reservationsCollection = db.collection("reservations");
 
-    // ✅ Start the server only after DB connects
-    app.listen(5000, () => {
+    server.listen(5000, () => {
       console.log("Server running on port 5000");
     });
   })
@@ -94,18 +92,6 @@ app.delete("/api/menu/:id", async (req, res) => {
   }
 });
 
-app.get("/api/reservations", async (req, res) => {
-  try {
-    const client = await MongoClient.connect();
-    const db = client.db("restaurant");
-    const reservations = await db.collection("reservations").find().toArray();
-    client.close();
-    res.status(200).json(reservations);
-  } catch (error) {
-    console.error("Error fetching reservations:", error);
-    res.status(500).json({ error: "Internal server error." });
-  }
-});
 
 app.get("/api/users", async (req, res) => {
   try {
@@ -140,10 +126,23 @@ app.get("/api/orders/:id", async (req, res) => {
 })
 
 app.post("/api/create-checkout-session", async (req, res) => {
-  const { products,data } = req.body;
-  console.log(data)
-  const { userId, additionalInfo, items,type,total } = data;
-
+  const { products, data } = req.body;
+  const { userId, additionalInfo, items, type, total, coins } = data;
+  console.log(coins)
+  const user = await usersCollection.findOne({ _id: new mongodb.ObjectId(userId) });
+  const coinshaving = Number(user.coins) || 0;
+  const coinsToUse = Number(coins) || 0;
+  const orderTotal = Number(total) || 0;
+  console.log(coinshaving)
+  if (coinshaving < coinsToUse) {
+    return res.status(400).json({ error: "Insufficient coins." });
+  }
+  let discount = 0;
+  if (coinsToUse > 0)
+    discount = coinsToUse;
+  let finalTotal = orderTotal - discount;
+  if (finalTotal < 0) finalTotal = 0;
+  const earnedCoins = Math.floor(finalTotal / 10);
   const line_items = products.map((item) => ({
     price_data: {
       currency: "eur",
@@ -158,45 +157,57 @@ app.post("/api/create-checkout-session", async (req, res) => {
   }));
 
   try {
+    let coupon = null;
+    if (discount > 0) {
+      coupon = await stripe.coupons.create({
+        amount_off: Math.round(discount * 100),
+        currency: "eur",
+        name: `${coins} Coins Discount`,
+      });
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: line_items,
       mode: "payment",
+      discounts: coupon ? [{ coupon: coupon.id }] : [],
       success_url: "http://localhost:5173/success/{CHECKOUT_SESSION_ID}",
       cancel_url: "https://arya-pink-nine.vercel.app/cancel",
     });
-      try {
-        // Get UK time
-        const ukDate = new Date().toLocaleString("en-GB", { timeZone: "Europe/London" });
-        const ukTime = new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/London", hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        // Generate unique, meaningful orderId
-        const now = new Date();
-        const pad = n => n.toString().padStart(2, '0');
-        const dateStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
-        const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-        const randStr = Math.floor(1000 + Math.random() * 9000);
-        const orderId = `ARYA-${dateStr}-${timeStr}-${randStr}`;
 
-        const newOrder = {
-          userId,
-          items,
-          type,
-          sessionId: session.id,
-          status: "pending",
-          payment: "pending",
-          additionalInfo: additionalInfo,
-          createdAt: ukDate,
-          time: ukTime,
-          table: additionalInfo.tableNumber || null,
-          total: total,
-          orderId: orderId,
-        };
+    try {
+      const ukDate = new Date().toLocaleString("en-GB", { timeZone: "Europe/London" });
+      const ukTime = new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/London", hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const now = new Date();
+      const pad = n => n.toString().padStart(2, '0');
+      const dateStr = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
+      const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+      const randStr = Math.floor(1000 + Math.random() * 9000);
+      const orderId = `ARYA-${dateStr}-${timeStr}-${randStr}`;
 
-        await orderCollection.insertOne(newOrder);
-      } catch (error) {
-        console.error("Error creating order:", error);
-        res.status(500).json({ error: "Internal server error." });
-      }
+      const newOrder = {
+        userId,
+        items,
+        type,
+        sessionId: session.id,
+        status: "pending",
+        payment: "pending",
+        additionalInfo: additionalInfo,
+        createdAt: ukDate,
+        time: ukTime,
+        table: additionalInfo.tableNumber || null,
+        total: finalTotal,
+        orderId: orderId,
+        coinsUsed: coins,
+        coinsEarned: earnedCoins,
+      };
+      console.log("New order created:", newOrder);
+
+      await orderCollection.insertOne(newOrder);
+    } catch (error) {
+      console.error("Error creating order:", error);
+      return res.status(500).json({ error: "Internal server error." });
+    }
 
     res.json({ sessionId: session.id });
   } catch (error) {
@@ -205,10 +216,12 @@ app.post("/api/create-checkout-session", async (req, res) => {
   }
 });
 
+
 app.post("/api/order/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
   console.log("Creating order for session:", req.body);
   const order=await orderCollection.findOne({ sessionId })
+  const {coinsEarned,coinsUsed} = order;
   if(order.payment === "paid"){
     res.json("Order already paid");
     }
@@ -221,7 +234,6 @@ app.post("/api/order/:sessionId", async (req, res) => {
   }
   console.log("User ID from order:", order.userId);
   const user = await usersCollection.findOne({ _id: new mongodb.ObjectId(order.userId) });
-console.log(user)
 
   const now = new Date();
   const pad = n => n.toString().padStart(2, '0');
@@ -283,12 +295,17 @@ console.log(user)
 </html>`})
 
 user.cartItems = [];
+const safeCoinsUsed = Number(coinsUsed) || 0;
+const safeCoinsEarned = Number(coinsEarned) || 0;
+const safeUserCoins = Number(user.coins) || 0;
+const newCoinBalance = (safeUserCoins - safeCoinsUsed) + safeCoinsEarned;
+console.log("Updating user coins:", user._id, newCoinBalance);
 await usersCollection.updateOne(
   { _id: user._id },
-  { $set: { cartItems: [] } }
+  { $set: { cartItems: [], coins: newCoinBalance } }
 );
-
-res.json("Payment successful");
+console.log("Updated user coins:", user._id, newCoinBalance);
+res.json({ "Payment successful": true, coins: newCoinBalance });
 });
 app.post("/api/order-status", async (req, res) => {
   const { orderId, status } = req.body;
@@ -307,6 +324,15 @@ app.post("/api/order-status", async (req, res) => {
   }
 });
 
+app.get("/coins/:userid",async(req,res)=>{
+  const {userid}=req.params
+  const user=await usersCollection.findOne({ _id: new mongodb.ObjectId(userid) });
+  if(user){
+    return res.status(200).json({ coins: user.coins });
+  }
+  return res.status(404).json({ error: "User not found." });
+});
+
 app.post("/api/auth", async (req, res) => {
   const {email,password,username,new_user,google} = req.body;
   console.log(req.body)
@@ -316,20 +342,20 @@ app.post("/api/auth", async (req, res) => {
     if (existingUser) {
       return res.status(400).json({ error: "User already exists." });
     }
-    const user = await usersCollection.insertOne({ email, password, username, cartItems: [] });
+  const user = await usersCollection.insertOne({ email, password, username, cartItems: [], coins: 0 });
     console.log("New user created:", user);
-    return res.status(201).json({ message: "Login Done!" , userId: user.insertedId ,email,username,cartItems:[] });
+    return res.status(201).json({ message: "Login Done!" , userId: user.insertedId ,email,username,cartItems:[],coins:0 });
   }
   if (google){
     if (user) {
-      return res.status(200).json({ message: "Login Done", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [] });
+      return res.status(200).json({ message: "Login Done", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [],coins: user.coins || 0 });
     }
-    await usersCollection.insertOne({ email, username, cartItems: [] });
-    return res.status(201).json({ message: "Login Done", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [] });
+  await usersCollection.insertOne({ email, username, cartItems: [], coins: 0 });
+    return res.status(201).json({ message: "Login Done", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [],coins: 0 });
   }
   if (user) {
     if (user.password === password) {
-      res.status(200).json({ message: "Login successful!", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [] });
+      res.status(200).json({ message: "Login successful!", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [],coins: user.coins || 0 });
     } else {
       res.status(401).json({ error: "Invalid password." });
     }
@@ -351,36 +377,6 @@ app.post("/api/cart",async(req,res)=>{
     res.status(500).json({ error: "Internal server error." });
   }
 })
-app.post("/api/reservation", async (req, res) => {
-  const { name, phone, email, guests, date, time } = req.body;
-  if (!name || !phone || !email || !guests || !date || !time) {
-    return res.status(400).json({ error: "All fields are required." });
-  }
-
-  try {
-    const client = await MongoClient.connect();
-    const db = client.db("restaurant");
-    const collection = db.collection("reservations");
-
-    const newReservation = {
-      name,
-      phone,
-      email,
-      guests,
-      date,
-      time,
-      createdAt: new Date()
-    };
-
-    await collection.insertOne(newReservation);
-    client.close();
-
-    res.status(201).json({ message: "Reservation created successfully!" });
-  } catch (error) {
-    console.error("Error creating reservation:", error);
-    res.status(500).json({ error: "Internal server error." });
-  }
-});
 app.get('/api/check' ,async (req , res)=>{
   const orders=await orderCollection.find({status:"pending"}).toArray();
   if(orders){
@@ -457,6 +453,63 @@ io.on("connection", (socket) => {
     console.log("Client disconnected:", socket.id);
   });
 });
-server.listen(5000, () => {
-  console.log("Server is running on port 5000");
-});
+
+function toMinutes(timeStr) {
+  console.log(timeStr)
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+}
+
+async function isAvailable(date, startTime, endTime, table) {
+  const reservations = await reservationsCollection.find({ date, table,status:"accepted" }).toArray();
+
+  const newStart = toMinutes(startTime);
+  const newEnd = toMinutes(endTime);
+
+  for (let r of reservations) {
+    const existingStart = toMinutes(r.startTime);
+    const existingEnd = toMinutes(r.endTime);
+
+    if (newStart < existingEnd && newEnd > existingStart) {
+      return false;
+    }
+  }
+
+  return true; 
+}
+
+app.post("/api/reservation",async (req,res)=>{
+  const {name,email,phone,table,date,startTime,endTime} = req.body;
+  if(!name || !email || !phone || !table || !date || !startTime || !endTime){
+    return res.status(400).json({error:"All fields are required"});
+  }
+  if (await isAvailable(date, startTime, endTime, table)) {
+    reservationsCollection.insertOne({name,email,phone,table,date,startTime,endTime,status:"pending"})
+      .then(() => {
+        res.status(201).json({message:"Reservation created successfully!"});
+      })
+      .catch((error) => {
+        console.error("Error creating reservation:", error);
+        res.status(500).json({error:"Internal server error."});
+      });
+  }
+  else{
+    res.status(409).json({error:"Reservation time is not available."});
+  }
+
+})
+app.get("/api/reservations/:date",async (req,res)=>{
+  const {date} = req.params;
+  if(!date){
+    return res.status(400).json({error:"Date is required"});
+  }
+  const reservations = await reservationsCollection.find({date}).toArray();
+  res.status(200).json(reservations);
+})
+
+app.post("/api/reservations/:id",async (req,res)=>{ 
+  const {id}=req.params
+  const {status}=req.body
+  await reservationsCollection.updateOne({_id:new mongodb.ObjectId(id)},{$set:{status}})
+  res.status(200).json({message:"Reservation status updated successfully!"})
+})
