@@ -348,6 +348,7 @@ res.json({ "Payment successful": true, coins: newCoinBalance });
 app.post("/api/order-status", async (req, res) => {
   const { orderId, status } = req.body
   const order = await orderCollection.findOne({ _id: new mongodb.ObjectId(orderId) });
+  const user=await usersCollection.findOne({ _id: new mongodb.ObjectId(order.userId) });
   console.log(orderId,status)
   if (!orderId || !status) {
     return res.status(400).json({ error: "Invalid order status data." });
@@ -357,7 +358,7 @@ app.post("/api/order-status", async (req, res) => {
     const orderIdObj = new mongodb.ObjectId(orderId);
     if (status=="On Process") {
       await transporter.sendMail({
-        to:order.additionalInfo.email,
+        to:user.email,
         subject: "Your Order Status Update",
         html: `<!DOCTYPE html>
 <html>
