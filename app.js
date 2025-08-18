@@ -355,7 +355,7 @@ app.post("/api/order-status", async (req, res) => {
 
   try {
     const orderIdObj = new mongodb.ObjectId(orderId);
-    if (status=="accepted") {
+    if (status=="Completed") {
       await transporter.sendMail({
         to:order.additionalInfo.email,
         subject: "Your Order Status Update",
