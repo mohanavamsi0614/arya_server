@@ -247,51 +247,89 @@ app.post("/api/order/:sessionId", async (req, res) => {
     { sessionId },
     { $set: { payment: "paid", orderId: orderId, createdAt: ukDate, time: ukTime } }
   );
-  await transporter.sendMail({to:user.email,from:process.env.MAIL,subject:"Order Confirmation",html:`<!DOCTYPE html>
+  await transporter.sendMail({to:user.email,from:process.env.MAIL,subject:"Order Confirmation",html:`
+    <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <title>Order Confirmation</title>
-  <style>
-    body { font-family: Arial, sans-serif; color: #333; margin: 0; padding: 0; }
-    .container { max-width: 600px; margin: auto; padding: 20px; background-color: #fff; }
-    h2 { color: #d35400; }
-    p { font-size: 16px; line-height: 1.5; }
-    ul { padding-left: 20px; }
-    li { margin-bottom: 8px; }
-    .footer { margin-top: 20px; font-size: 14px; color: #777; }
-  </style>
-</head>
-<body>
-  <div class="container">
+  <head>
+    <meta charset="UTF-8">
+    <title>Your Arya Asian Order is Confirmed!</title>
+    <style>
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        background-color: #fafafa;
+        color: #333;
+        margin: 0;
+        padding: 20px;
+      }
+      h2 {
+        color: #b22222;
+        font-size: 24px;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 8px;
+      }
+      h3 {
+        color: #444;
+        margin-top: 25px;
+      }
+      p {
+        line-height: 1.6;
+        font-size: 14px;
+      }
+      ul {
+        background: #fff;
+        padding: 15px 20px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        list-style: none;
+      }
+      ul li {
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+      a {
+        color: #b22222;
+        font-weight: bold;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      strong {
+        color: #000;
+      }
+    </style>
+  </head>
+  <body>
     <h2>Your Arya Asian Order is Confirmed!</h2>
-    <p>Hi <strong>${user.username}</strong>,</p>
-
-    <p>Thank you for ordering from <strong>Arya Asian Restaurant</strong>!  
-    Your order <strong>#${order.orderId}</strong> has been successfully placed and paid.</p>
+    <p>Hi ${user.username},</p>
+    <p>Thank you for ordering from Arya Asian Restaurant!<br>
+    Your order #${orderId} has been successfully placed and paid.</p>
 
     <h3>Order Details:</h3>
     <ul>
-      <li><strong>Items:</strong>
-        <ul>
-          ${order.items.map(item => `<li>
-          <img src="${item.image}" alt="${item.name}" style="width: 100px; height: auto;">
-          ${item.name} - £${item.price}</li>`).join("")}
-        </ul>
+      <li>Order Number: #${orderId}</li>
+      <li>Customer Name: ${user.username}</li>
+      <li>Contact Number: ${user.phone}</li>
+      <li>Delivery Address: ${user.address}</li>
+      <li>Order Type: ${order.type}</li>
+      <li>Order Time: ${order.createdAt}</li>
+      <li>Items Ordered:<br>
+      ${order.items.map(item => `${item.name} – Qty: ${item.quantity} – ₹${item.price}`).join("<br>")}
       </li>
-      <li><strong>Total Amount:</strong> £${order.total}</li>
-      <li><strong>Order Time:</strong> ${order.createdAt} ${order.time}</li>
-      <li><strong>Delivery/Pickup:</strong> ${order.deliveryMode}</li>
+      <li>Total Amount: ₹${order.total}</li>
     </ul>
 
-    <p>We’ll start preparing your food right away so it reaches you fresh and delicious.<br>
-    You can track your order status anytime here: <a href="[Order Tracking Link]">Track Order</a></p>
+    <p>We’ll start preparing your food right away so it reaches you fresh and delicious.</p>
 
-    <p>If you have any questions, feel free to call us at <strong>[Phone Number]</strong>.</p>
+    <p>You can track your order status anytime here: <a href="[Order Tracking Link]">Track Order</a></p>
 
-    <p class="footer"><strong>Arya Asian Restaurant</strong> – Bringing authentic Asian flavors to your table.</p>
-  </div>
-</body>
+    <p>If you have any questions, feel free to call us at [Phone Number].</p>
+
+    <p>Arya Asian Restaurant – Bringing authentic Asian flavors to your table.</p>
+
+    <p><strong>Note:</strong> Delivery times may vary due to traffic, weather, or order volume.<br>
+    If your order is extremely delayed, please contact us directly at [Phone Number] so we can assist you immediately.</p>
+  </body>
 </html>`})
 
 user.cartItems = [];
@@ -308,7 +346,8 @@ console.log("Updated user coins:", user._id, newCoinBalance);
 res.json({ "Payment successful": true, coins: newCoinBalance });
 });
 app.post("/api/order-status", async (req, res) => {
-  const { orderId, status } = req.body;
+  const { orderId, status } = req.body
+  const order = await orderCollection.findOne({ _id: new mongodb.ObjectId(orderId) });
   console.log(orderId,status)
   if (!orderId || !status) {
     return res.status(400).json({ error: "Invalid order status data." });
@@ -316,7 +355,96 @@ app.post("/api/order-status", async (req, res) => {
 
   try {
     const orderIdObj = new mongodb.ObjectId(orderId);
-    await orderCollection.updateOne({ _id: orderIdObj }, { $set: { status } });
+    if (status=="accepted") {
+      await transporter.sendMail({
+        to:order.additionalInfo.email,
+        subject: "Your Order Status Update",
+        html: `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Your Arya Asian Order is Confirmed!</title>
+    <style>
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        background-color: #fafafa;
+        color: #333;
+        margin: 0;
+        padding: 20px;
+      }
+      h2 {
+        color: #b22222;
+        font-size: 24px;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 8px;
+      }
+      h3 {
+        color: #444;
+        margin-top: 25px;
+      }
+      p {
+        line-height: 1.6;
+        font-size: 14px;
+      }
+      ul {
+        background: #fff;
+        padding: 15px 20px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        list-style: none;
+      }
+      ul li {
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+      a {
+        color: #b22222;
+        font-weight: bold;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      strong {
+        color: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Your Arya Asian Order is Confirmed!</h2>
+    <p>Hi [Customer Name],</p>
+    <p>Thank you for ordering from Arya Asian Restaurant!<br>
+    Your order #[Order Number] has been successfully placed and paid.</p>
+
+    <h3>Order Details:</h3>
+    <ul>
+      <li>Order Number: #[Order Number]</li>
+      <li>Customer Name: ${order.additionalInfo.name}</li>
+      <li>Contact Number: ${order.additionalInfo.phone}</li>
+      <li>Delivery Address: ${order.additionalInfo.address}</li>
+      <li>Order Type: ${order.type}</li>
+      <li>Order Time: ${order.createdAt}</li>
+      <li>Items Ordered:<br>
+        ${order.items.map(item => `${item.name} – Qty: ${item.quantity} – ₹${item.price}`).join("<br>")}
+      </li>
+      <li>Total Amount: ₹${order.total}</li>
+    </ul>
+
+    <p>We’ll start preparing your food right away so it reaches you fresh and delicious.</p>
+
+    <p>You can track your order status anytime here: <a href="[Order Tracking Link]">Track Order</a></p>
+
+    <p>If you have any questions, feel free to call us at [Phone Number].</p>
+
+    <p>Arya Asian Restaurant – Bringing authentic Asian flavors to your table.</p>
+
+    <p><strong>Note:</strong> Delivery times may vary due to traffic, weather, or order volume.<br>
+    If your order is extremely delayed, please contact us directly at [Phone Number] so we can assist you immediately.</p>
+  </body>
+</html>`
+      })
+      await orderCollection.updateOne({ _id: orderIdObj }, { $set: { status } });
+    }
     res.status(200).json({ message: "Order status updated successfully!" });
   } catch (error) {
     console.error("Error updating order status:", error);
@@ -520,6 +648,181 @@ app.get("/api/reservation/:userid",async (req,res)=>{
 app.post("/api/reservations/:id",async (req,res)=>{ 
   const {id}=req.params
   const {status}=req.body
+  const reso=await reservationsCollection.findOne({_id:new mongodb.ObjectId(id)});
+  if (status=="accepted"){
+    transporter.sendMail({
+      to:reso.email,
+      from:process.env.MAIL,
+      subject:"Reservation Accepted",
+      html:`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Your Table Reservation at Arya Asian is Confirmed!</title>
+    <style>
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        background-color: #fafafa;
+        color: #333;
+        margin: 0;
+        padding: 20px;
+      }
+      h2 {
+        color: #b22222;
+        font-size: 22px;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 8px;
+      }
+      h3 {
+        color: #444;
+        margin-top: 20px;
+      }
+      p {
+        line-height: 1.6;
+        font-size: 14px;
+      }
+      ul {
+        background: #fff;
+        padding: 15px 20px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        list-style: none;
+      }
+      ul li {
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+      strong {
+        color: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Your Table Reservation at Arya Asian is Confirmed!</h2>
+    <p>Hi [Customer Name],</p>
+    <p>
+      Thank you for choosing Arya Asian Restaurant!<br>
+      Your table reservation has been successfully confirmed.
+    </p>
+
+    <h3>Reservation Details:</h3>
+    <ul>
+      <li>Reservation Number: #[Reservation ID]</li>
+      <li>Customer Name: ${reso.name}</li>
+      <li>Contact Number: ${reso.phone}</li>
+      <li>Date: ${reso.date}</li>
+      <li>Time: ${reso.startTime} - ${reso.endTime}</li>
+      <li>Number of Guests: [No. of Guests]</li>
+    </ul>
+
+    <p>
+      We look forward to serving you an unforgettable dining experience filled with authentic Asian flavors.
+    </p>
+
+    <p>
+      If you need to modify or cancel your reservation, please contact us at [Phone Number].
+    </p>
+
+    <p>
+      <strong>Note:</strong> In case of any delay beyond 15 minutes, kindly inform us to hold your reservation.
+    </p>
+
+    <p>—<br>
+    Arya Asian Restaurant<br>
+    Where taste meets tradition</p>
+  </body>
+</html>`
+    })
+  }
   await reservationsCollection.updateOne({_id:new mongodb.ObjectId(id)},{$set:{status}})
   res.status(200).json({message:"Reservation status updated successfully!"})
+})
+app.get("/check2",async (req,res)=>{
+  const rsv=await reservationsCollection.find({status:"pending"}).toArray();
+  rsv.forEach(async (element) => {
+  await transporter.sendMail({
+    to:"mohanavamsi14@gmail.com",
+    from:process.env.MAIL,
+    html:`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Action Needed – Reservation  Pending</title>
+    <style>
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+        background-color: #fafafa;
+        color: #333;
+        margin: 0;
+        padding: 20px;
+      }
+      h2 {
+        color: #b22222;
+        font-size: 22px;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 8px;
+      }
+      h3 {
+        color: #444;
+        margin-top: 20px;
+      }
+      p {
+        line-height: 1.6;
+        font-size: 14px;
+      }
+      ul {
+        background: #fff;
+        padding: 15px 20px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        list-style: none;
+      }
+      ul li {
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+      a {
+        color: #b22222;
+        font-weight: bold;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      strong {
+        color: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Action Needed – Reservation #[Reservation ID] Pending</h2>
+    <p>Hello [Staff Name],</p>
+    <p>
+      A customer has made a table reservation, but it has been waiting for
+      acceptance for over 5 minutes on the Arya Asian dashboard.
+    </p>
+
+    <h3>Reservation Details:</h3>
+    <ul>
+      <li>Reservation Number: #[Reservation ID]</li>
+      <li>Customer Name: ${element.name}</li>
+      <li>Contact Number: ${element.phone}</li>
+      <li>Reservation Date: ${element.date}</li>
+      <li>Reservation Time: ${element.startTime} - ${element.endTime}</li>
+    </ul>
+
+    <p>
+      Please log into your staff dashboard now and accept the reservation to confirm it for the customer.<br>
+      Dashboard Link: <a href="">Open Dashboard</a>
+    </p>
+
+    <p>
+      Thank you for ensuring smooth operations and an excellent guest experience.
+    </p>
+
+    <p>— Arya Asian Management Team</p>
+  </body>
+</html>`
+  });})
+  res.json("Check completed");
 })
