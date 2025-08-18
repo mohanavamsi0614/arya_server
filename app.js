@@ -479,12 +479,12 @@ async function isAvailable(date, startTime, endTime, table) {
 }
 
 app.post("/api/reservation",async (req,res)=>{
-  const {name,email,phone,table,date,startTime,endTime} = req.body;
+  const {name,email,phone,table,date,startTime,endTime,userId} = req.body;
   if(!name || !email || !phone || !table || !date || !startTime || !endTime){
     return res.status(400).json({error:"All fields are required"});
   }
   if (await isAvailable(date, startTime, endTime, table)) {
-    reservationsCollection.insertOne({name,email,phone,table,date,startTime,endTime,status:"pending"})
+    reservationsCollection.insertOne({name,email,phone,table,date,startTime,endTime,userId,status:"pending"})
       .then(() => {
         res.status(201).json({message:"Reservation created successfully!"});
       })
@@ -504,6 +504,15 @@ app.get("/api/reservations/:date",async (req,res)=>{
     return res.status(400).json({error:"Date is required"});
   }
   const reservations = await reservationsCollection.find({date}).toArray();
+  res.status(200).json(reservations);
+})
+
+app.get("/api/reservations/:userid",async (req,res)=>{
+  const {userid} = req.params;
+  if(!userid){
+    return res.status(400).json({error:"User ID is required"});
+  }
+  const reservations = await reservationsCollection.find({userid}).toArray();
   res.status(200).json(reservations);
 })
 
