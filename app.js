@@ -355,7 +355,7 @@ app.post("/api/order-status", async (req, res) => {
 
   try {
     const orderIdObj = new mongodb.ObjectId(orderId);
-    if (status=="Completed") {
+    if (status=="On Process") {
       await transporter.sendMail({
         to:order.additionalInfo.email,
         subject: "Your Order Status Update",
@@ -443,8 +443,8 @@ app.post("/api/order-status", async (req, res) => {
   </body>
 </html>`
       })
-      await orderCollection.updateOne({ _id: orderIdObj }, { $set: { status } });
     }
+    await orderCollection.updateOne({ _id: orderIdObj }, { $set: { status } });
     res.status(200).json({ message: "Order status updated successfully!" });
   } catch (error) {
     console.error("Error updating order status:", error);
