@@ -480,6 +480,7 @@ async function isAvailable(date, startTime, endTime, table) {
 
 app.post("/api/reservation",async (req,res)=>{
   const {name,email,phone,table,date,startTime,endTime,userId} = req.body;
+  console.log(req.body)
   if(!name || !email || !phone || !table || !date || !startTime || !endTime){
     return res.status(400).json({error:"All fields are required"});
   }
@@ -507,12 +508,12 @@ app.get("/api/reservations/:date",async (req,res)=>{
   res.status(200).json(reservations);
 })
 
-app.get("/api/reservations/:userid",async (req,res)=>{
+app.get("/api/reservation/:userid",async (req,res)=>{
   const {userid} = req.params;
   if(!userid){
     return res.status(400).json({error:"User ID is required"});
   }
-  const reservations = await reservationsCollection.find({userid}).toArray();
+  const reservations = await reservationsCollection.find({userId:(userid)}).toArray();
   res.status(200).json(reservations);
 })
 
