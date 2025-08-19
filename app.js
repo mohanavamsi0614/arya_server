@@ -478,8 +478,8 @@ app.post("/api/auth", async (req, res) => {
     if (user) {
       return res.status(200).json({ message: "Login Done", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [],coins: user.coins || 0 });
     }
-  await usersCollection.insertOne({ email, username, cartItems: [], coins: 0 });
-    return res.status(201).json({ message: "Login Done", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [],coins: 0 });
+  const user = await usersCollection.insertOne({ email, username, cartItems: [], coins: 0 });
+    return res.status(201).json({ message: "Login Done", userId: user.insertedId ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [],coins: 0 });
   }
   if (user) {
     if (user.password === password) {
