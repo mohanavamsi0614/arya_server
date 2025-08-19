@@ -128,12 +128,10 @@ app.get("/api/orders/:id", async (req, res) => {
 app.post("/api/create-checkout-session", async (req, res) => {
   const { products, data } = req.body;
   const { userId, additionalInfo, items, type, total, coins } = data;
-  console.log(coins)
   const user = await usersCollection.findOne({ _id: new mongodb.ObjectId(userId) });
   const coinshaving = Number(user.coins) || 0;
-  const coinsToUse = Number(coins) || 0;
+  const coinsToUse = Number(coins) / 10 || 0;
   const orderTotal = Number(total) || 0;
-  console.log(coinshaving)
   if (coinshaving < coinsToUse) {
     return res.status(400).json({ error: "Insufficient coins." });
   }
@@ -224,8 +222,9 @@ app.post("/api/order/:sessionId", async (req, res) => {
   const {coinsEarned,coinsUsed} = order;
   if(order.payment === "paid"){
     res.json("Order already paid");
-    }
-  
+    return;
+  }
+
   const check=await stripe.checkout.sessions.retrieve(sessionId)
   console.log("Payment status:", check);
   if (check.payment_status != "paid"){
@@ -316,7 +315,7 @@ app.post("/api/order/:sessionId", async (req, res) => {
       <li>Items Ordered:<br>
       ${order.items.map(item => `${item.name} – Qty: ${item.quantity} – ₹${item.price}`).join("<br>")}
       </li>
-      <li>Total Amount: ₹${order.total}</li>
+      <li>Total Amount: £{order.total}</li>
     </ul>
 
     <p>We’ll start preparing your food right away so it reaches you fresh and delicious.</p>
