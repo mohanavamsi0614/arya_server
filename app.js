@@ -413,16 +413,16 @@ app.post("/api/order-status", async (req, res) => {
   </head>
   <body>
     <h2>Your Arya Asian Order is Confirmed!</h2>
-    <p>Hi [Customer Name],</p>
+    <p>Hi ${user.username},</p>
     <p>Thank you for ordering from Arya Asian Restaurant!<br>
     Your order #[Order Number] has been successfully placed and paid.</p>
 
     <h3>Order Details:</h3>
     <ul>
       <li>Order Number: #[Order Number]</li>
-      <li>Customer Name: ${order.additionalInfo.name}</li>
-      <li>Contact Number: ${order.additionalInfo.phone}</li>
-      <li>Delivery Address: ${order.additionalInfo.address}</li>
+      <li>Customer Name: ${order.additionalInfo.fullName}</li>
+      <li>Contact Number: ${order.additionalInfo.phoneNumber || 'NA'}</li>
+      <li>Delivery Address: ${order.additionalInfo.address || 'NA'}</li>
       <li>Order Type: ${order.type}</li>
       <li>Order Time: ${order.createdAt}</li>
       <li>Items Ordered:<br>
