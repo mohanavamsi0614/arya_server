@@ -470,16 +470,16 @@ app.post("/api/auth", async (req, res) => {
     if (existingUser) {
       return res.status(400).json({ error: "User already exists." });
     }
-  const user = await usersCollection.insertOne({ email, password, username, cartItems: [], coins: 0 });
-    console.log("New user created:", user);
-    return res.status(201).json({ message: "Login Done!" , userId: user.insertedId ,email,username,cartItems:[],coins:0 });
+  const newuser = await usersCollection.insertOne({ email, password, username, cartItems: [], coins: 0 });
+    console.log("New user created:", newuser);
+    return res.status(201).json({ message: "Login Done!" , userId: newuser.insertedId ,email,username,cartItems:[],coins:0 });
   }
   if (google){
     if (user) {
       return res.status(200).json({ message: "Login Done", userId: user._id ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [],coins: user.coins || 0 });
     }
-  const user = await usersCollection.insertOne({ email, username, cartItems: [], coins: 0 });
-    return res.status(201).json({ message: "Login Done", userId: user.insertedId ,email,username: user.username,cartItems: user.cartItems ? user.cartItems : [],coins: 0 });
+  const newuser = await usersCollection.insertOne({ email, username, cartItems: [], coins: 0 });
+    return res.status(201).json({ message: "Login Done", userId: newuser.insertedId ,email,username: username,cartItems:  [],coins: 0 });
   }
   if (user) {
     if (user.password === password) {
